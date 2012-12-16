@@ -7,6 +7,11 @@ describe "Authentication" do
 
     it { should have_selector("h1",    text: 'Sign in') }
     it { should have_selector("title", text: 'Sign in') }
+
+    it { should_not have_link('Users') }
+    it { should_not have_link('Profile') }
+    it { should_not have_link('Settings') }
+    it { should_not have_link('Sign out') }
   end
 
   describe "signin" do
@@ -51,14 +56,24 @@ describe "Authentication" do
       describe "when attempting to visit a protected page" do
         before do
           visit edit_user_path(user)
-          fill_in "Email", with: user.email
-          fill_in "Password", with: user.password
-          click_button "Sign in"
+          sign_in user
         end
 
         describe "after signing in" do
           it "should render the desired protected page" do
             page.should have_selector('title', text: "Edit user")
+          end
+
+          describe "after signing in again" do
+            before do
+              delete signout_path
+              visit signin_path
+              sign_in user
+            end
+
+            it "should render the default (profile) page" do
+              page.should have_selector('title', text: user.name)
+            end
           end
         end
       end
@@ -76,6 +91,18 @@ describe "Authentication" do
       describe "submitting the update action" do
         before { put user_path(user) }
         specify { response.should redirect_to(signin_path) }
+      end
+
+      describe "in the Microposts controller" do
+        describe "submitting to the create action" do
+          before { post microposts_path }
+          specify { response.should redirect_to(signin_path) }
+        end
+
+        describe "submitting to the destroy action" do
+          before { delete micropost_path(FactoryGirl.create(:micropost)) }
+          specify { response.should redirect_to(signin_path) }
+        end
       end
     end
 
@@ -95,10 +122,27 @@ describe "Authentication" do
       end
     end
 
+
+    describe  "for signed in users" do
+      let(:user) { FactoryGirl.create(:user) }
+      before { sign_in user }
+
+      describe "visit signup page" do
+        before { get signup_path }
+        specify { response.should redirect_to(root_path) }
+      end
+
+      describe "visit Users#new page" do
+        before { post users_path }
+        specify { response.should redirect_to(root_path) }
+      end
+    end
+
+
     describe "as non-admin user" do
       let(:user) { FactoryGirl.create(:user) }
       let(:non_admin) { FactoryGirl.create(:user) }
-      
+
       before { sign_in non_admin }
 
       describe "submitting DELETE request to the Users#destroy action" do
@@ -106,6 +150,16 @@ describe "Authentication" do
         specify { response.should redirect_to(root_path) }
       end
     end
+
+    describe "as an admin user" do
+      let(:admin) { FactoryGirl.create(:admin) }
+
+      before { sign_in admin }
+      it "cannot DELETE self (Users#destroy)" do
+        expect { delete user_path(admin) }.to_not change(User, :count).by(-1)
+      end
+    end
+
 
   end
 end
